@@ -112,11 +112,20 @@ public class MainActivity extends Activity {
             new Thread(() -> {
                 int result;
                 String error = null;
-                try {
-                    result = dpm.setGlobalPrivateDnsModeSpecifiedHost(admin, h);
-                } catch (Exception e) {
-                    result = -1;
-                    error = e.getMessage();
+                if (isConfigured(h)) {
+                    // Ya está puesto (por ejemplo, a mano en Ajustes): no hace falta comprobarlo.
+                    result = DevicePolicyManager.PRIVATE_DNS_SET_NO_ERROR;
+                } else {
+                    try {
+                        result = dpm.setGlobalPrivateDnsModeSpecifiedHost(admin, h);
+                    } catch (Exception e) {
+                        result = -1;
+                        error = e.getMessage();
+                    }
+                    // Algunos móviles fallan en la comprobación aunque el DNS funcione.
+                    if (result != DevicePolicyManager.PRIVATE_DNS_SET_NO_ERROR && isConfigured(h)) {
+                        result = DevicePolicyManager.PRIVATE_DNS_SET_NO_ERROR;
+                    }
                 }
                 final int r = result;
                 final String err = error;
@@ -124,7 +133,9 @@ public class MainActivity extends Activity {
                     if (r != DevicePolicyManager.PRIVATE_DNS_SET_NO_ERROR) {
                         status.setText("No se pudo poner ese DNS (código " + r + ")"
                                 + (err != null ? ": " + err : "")
-                                + ".\nRevisa la dirección y que tengas internet.");
+                                + ".\n\nSolución: ponlo a mano en Ajustes → Conexiones → "
+                                + "Más ajustes de conexión → DNS privado, con esta misma "
+                                + "dirección, y vuelve a pulsar BLOQUEAR.");
                         lock.setEnabled(true);
                         return;
                     }
@@ -171,6 +182,16 @@ public class MainActivity extends Activity {
     }
 
     // ---------- Bloqueo ----------
+
+    /** ¿El DNS privado del sistema ya está puesto con este host? */
+    private boolean isConfigured(String host) {
+        try {
+            return dpm.getGlobalPrivateDnsMode(admin) == DevicePolicyManager.PRIVATE_DNS_MODE_PROVIDER_HOSTNAME
+                    && host.equalsIgnoreCase(dpm.getGlobalPrivateDnsHost(admin));
+        } catch (Exception e) {
+            return false;
+        }
+    }
 
     private boolean isLocked() {
         Bundle r = dpm.getUserRestrictions(admin);
